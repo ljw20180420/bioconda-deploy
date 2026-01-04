@@ -1,29 +1,15 @@
 #!/bin/bash
 
-update_meta() {
-    local url=$1
-    local tarball=${url##*/}
-    local version=${tarball%.tar.gz}
-    local version=${version#v}
-    local escaped_version=$(sed -r 's/\./\\\./g' <<<${version})
-    local url_with_dynamic_version=$(sed -r 's/'${escaped_version}'/{{ version }}/' <<<${url})
-    echo ${escaped_version}
-    echo ${url_with_dynamic_version}
-    wget $url
-    local sha256=$(sha256sum ${tarball} | cut -d' ' -f1)
+source "update_meta.sh"
 
-    sed -r -i \
-        -e '/^\{% set version = ".*" %\}$/ s/"(.*)"/"'"${version}"'"/' \
-        -e '/^  url: / s|(https://github.com/ljw20180420/rearr/archive/refs/tags/.*\.tar\.gz)$|'"${url_with_dynamic_version}"'|' \
-        -e '/^  sha256: / s|^(  sha256: )(.*)$|\1'${sha256}'|' \
-        recipes/rearr/meta.yaml
-}
+url=$1
+pkg=$(sed -r 's|https://github.com/ljw20180420/(.*)/archive/refs/tags/.*\.tar\.gz|\1|' <<<${url})
 
 git checkout master
 # Delete local branch
-git branch -D update_rearr
+git branch -D "update_${pkg}"
 # Delete branch in your fork via the remote named "origin"
-git push origin -d update_rearr
+git push origin -d "update_${pkg}"
 
 # exit on error
 set -e
@@ -32,15 +18,15 @@ set -e
 git pull upstream master
 git push origin master
 
-# Create and checkout a new branch for rearr
-git checkout -b update_rearr
+# Create and checkout a new branch
+git checkout -b "update_${pkg}"
 
-update_meta $1
+update_meta ${url}
 
-git commit -am "Update rearr"
+git commit -am "Update ${pkg}"
 
-git push --set-upstream origin update_rearr
+git push --set-upstream origin "update_${pkg}"
 
-conda build recipes/rearr
+conda build "recipes/${pkg}"
 
 gh pr create --repo bioconda/bioconda-recipes --fill --template PULL_REQUEST_TEMPLATE.md
